@@ -59,9 +59,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </button>
               <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
                 <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">X</span>
+                  <span className="text-white font-semibold text-sm">JD</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-900 hidden md:block">XXX</span>
+                <span className="text-sm font-semibold text-gray-900 hidden md:block">John Doe</span>
               </div>
             </div>
           </div>
@@ -91,7 +91,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             </div>
             <p className="text-gray-600 font-medium mb-6">Get matched with an interviewer for your mock interview session</p>
-            <button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/20">
+            <button
+              onClick={() => onNavigate('find-interviewer')}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/20"
+            >
               Find Interviewer
             </button>
           </div>
@@ -107,7 +110,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             </div>
             <p className="text-gray-600 font-medium mb-6">Conduct mock interviews and earn credits to book your own sessions</p>
-            <button className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold py-3 rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow-lg shadow-green-500/20">
+            <button
+              onClick={() => onNavigate('host-session')}
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold py-3 rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow-lg shadow-green-500/20"
+            >
               Host Session
             </button>
           </div>
