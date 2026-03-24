@@ -13,9 +13,11 @@ interface Topic {
 
 export default function HostSession({ onNavigate }: HostSessionProps) {
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['Arrays']);
+  // NEW STATE: For the Success Modal
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   const topics: Topic[] = [
-    { name: 'Arrays', bgColor: 'bg-blue-500', textColor: 'text-white' },
+    { name: 'Arrays', bgColor: 'bg-blue-100', textColor: 'text-blue-700' },
     { name: 'Algorithms', bgColor: 'bg-purple-100', textColor: 'text-purple-700' },
     { name: 'Data Structures', bgColor: 'bg-green-100', textColor: 'text-green-700' },
     { name: 'C++', bgColor: 'bg-blue-100', textColor: 'text-blue-700' },
@@ -37,7 +39,8 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onNavigate('dashboard');
+    // Instead of immediately navigating, open the success modal!
+    setIsSuccessModalOpen(true);
   };
 
   return (
@@ -88,7 +91,7 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
         </div>
       </nav>
 
-      <main className="min-h-screen flex items-center justify-center px-4 py-8">
+      <main className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-2xl">
           <button
             onClick={() => onNavigate('dashboard')}
@@ -97,76 +100,101 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
           </button>
+          
           <div className="bg-white rounded-[24px] shadow-2xl p-12 border border-gray-100">
             <h2 className="text-4xl font-bold text-center text-gray-900 mb-10">Host an Interview</h2>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Select Date</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="MM/DD/YYYY"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                />
-                <Calendar className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Select Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-gray-700"
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Select Time</label>
-              <div className="relative">
-                <select className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none bg-white cursor-pointer">
-                  <option value="">Choose a time slot</option>
-                  <option value="09:00">9:00 AM</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="11:00">11:00 AM</option>
-                  <option value="14:00">2:00 PM</option>
-                  <option value="15:00">3:00 PM</option>
-                  <option value="16:00">4:00 PM</option>
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Select Time</label>
+                <div className="relative">
+                  <select 
+                    required 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none bg-white cursor-pointer text-gray-700"
+                  >
+                    <option value="" disabled selected>Choose a time slot</option>
+                    <option value="09:00">9:00 AM</option>
+                    <option value="10:00">10:00 AM</option>
+                    <option value="11:00">11:00 AM</option>
+                    <option value="14:00">2:00 PM</option>
+                    <option value="15:00">3:00 PM</option>
+                    <option value="16:00">4:00 PM</option>
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-4">Select Topics</label>
-              <div className="flex flex-wrap gap-3">
-                {topics.map((topic) => {
-                  const isSelected = selectedTopics.includes(topic.name);
-                  return (
-                    <button
-                      key={topic.name}
-                      type="button"
-                      onClick={() => toggleTopic(topic.name)}
-                      className={`px-4 py-2.5 rounded-full font-semibold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
-                        isSelected
-                          ? `${topic.bgColor} ${topic.textColor}`
-                          : `${topic.bgColor} ${topic.textColor} opacity-70 hover:opacity-100`
-                      }`}
-                    >
-                      {isSelected ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <Plus className="w-4 h-4" />
-                      )}
-                      {topic.name}
-                    </button>
-                  );
-                })}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-4">Select Topics (Multiple Allowed)</label>
+                <div className="flex flex-wrap gap-3">
+                  {topics.map((topic) => {
+                    const isSelected = selectedTopics.includes(topic.name);
+                    return (
+                      <button
+                        key={topic.name}
+                        type="button"
+                        onClick={() => toggleTopic(topic.name)}
+                        className={`px-4 py-2.5 rounded-full font-semibold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+                          isSelected
+                            ? `${topic.bgColor} ${topic.textColor} shadow-md`
+                            : `${topic.bgColor} ${topic.textColor} opacity-60 hover:opacity-100`
+                        }`}
+                      >
+                        {isSelected ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        {topic.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30 text-lg mt-10"
-            >
-              Post Slot (+1 Credit) →
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={selectedTopics.length === 0}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30 text-lg mt-10 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Post Slot (+1 Credit) →
+              </button>
+            </form>
           </div>
         </div>
       </main>
+
+      {/* NEW: Success Modal Popup */}
+      {isSuccessModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-sm p-8 text-center relative animate-in fade-in zoom-in duration-200">
+            <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-5">
+              <Check className="w-10 h-10 text-green-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">Slot Posted!</h3>
+            <p className="text-gray-500 font-medium mb-8 leading-relaxed">
+              Your availability has been added to the marketplace. You earned <span className="text-green-600 font-bold">+1 Credit!</span>
+            </p>
+            <button 
+              onClick={() => onNavigate('dashboard')} 
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 py-3.5 rounded-xl font-bold transition-colors"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

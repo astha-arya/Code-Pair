@@ -1,4 +1,5 @@
-import { Code2, Bell, Search, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+import { Code2, Bell, Search, ChevronDown, CheckCircle, X } from 'lucide-react';
 
 interface FindInterviewerProps {
   onNavigate: (page: string) => void;
@@ -87,6 +88,32 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
     },
   ];
 
+  // --- NEW STATE & LOGIC ---
+  const [filterTopic, setFilterTopic] = useState('All');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedInterviewer, setSelectedInterviewer] = useState<Interviewer | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  // Filter logic checking the skill objects
+  const filteredInterviewers = filterTopic === 'All' 
+    ? interviewers 
+    : interviewers.filter(person => person.skills.some(skill => skill.name === filterTopic));
+
+  const handleBookClick = (person: Interviewer) => {
+    setSelectedInterviewer(person);
+    setIsModalOpen(true);
+    setIsSuccess(false);
+  };
+
+  const confirmBooking = () => {
+    setIsSuccess(true);
+    setTimeout(() => {
+      setIsModalOpen(false);
+      onNavigate('dashboard');
+    }, 2000); // Redirect to dashboard after 2 seconds
+  };
+  // -------------------------
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -136,25 +163,36 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="bg-white rounded-[20px] shadow-md p-6 mb-8 border border-gray-100">
-          <div className="flex gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-              />
-            </div>
-            <button className="px-6 py-3 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium text-gray-700">
-              Filter by Topic
-              <ChevronDown className="w-4 h-4" />
-            </button>
+        <div className="bg-white rounded-[20px] shadow-md p-6 mb-8 border border-gray-100 flex gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+            />
+          </div>
+          <div className="relative">
+            {/* Added Select Dropdown for Filter Logic */}
+            <select
+              value={filterTopic}
+              onChange={(e) => setFilterTopic(e.target.value)}
+              className="px-6 py-3 pl-4 pr-10 appearance-none rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium text-gray-700 bg-white cursor-pointer outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600"
+            >
+              <option value="All">Filter by Topic (All)</option>
+              <option value="React">React</option>
+              <option value="MERN">MERN</option>
+              <option value="Python">Python</option>
+              <option value="C++">C++</option>
+              <option value="Java">Java</option>
+              <option value="Node.js">Node.js</option>
+            </select>
+            <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
           </div>
         </div>
 
         <div className="space-y-4">
-          {interviewers.map((interviewer) => (
+          {filteredInterviewers.map((interviewer) => (
             <div
               key={interviewer.id}
               className="bg-white rounded-[16px] shadow-md p-6 hover:shadow-lg transition-all border border-gray-100 flex items-center justify-between"
@@ -184,15 +222,66 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
 
               <div className="flex items-center gap-6">
                 <p className="text-sm font-medium text-gray-600 whitespace-nowrap">{interviewer.availability}</p>
-                <button className="px-5 py-2.5 bg-blue-50 text-blue-600 font-semibold text-sm rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap">
+                <button 
+                  onClick={() => handleBookClick(interviewer)}
+                  className="px-5 py-2.5 bg-blue-50 text-blue-600 font-semibold text-sm rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1 whitespace-nowrap"
+                >
                   Book (-1 Credit)
                   <span>→</span>
                 </button>
               </div>
             </div>
           ))}
+          
+          {filteredInterviewers.length === 0 && (
+            <div className="text-center py-10 text-gray-500 font-medium bg-white rounded-[16px] border border-gray-100">
+              No interviewers currently available for this topic.
+            </div>
+          )}
         </div>
       </main>
+
+      {/* NEW: Booking Confirmation Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md p-8 relative animate-in fade-in zoom-in duration-200">
+            {!isSuccess ? (
+              <>
+                <button 
+                  onClick={() => setIsModalOpen(false)} 
+                  className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                <h3 className="text-2xl font-bold text-center text-gray-900 mb-2">Confirm Booking</h3>
+                <p className="text-center text-gray-500 mb-8 font-medium leading-relaxed">
+                  Book a mock interview with <span className="font-bold text-gray-900">{selectedInterviewer?.name}</span> for <span className="text-gray-900">{selectedInterviewer?.availability}</span>? This will deduct 1 credit.
+                </p>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={confirmBooking} 
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold transition-colors shadow-lg shadow-blue-500/30"
+                  >
+                    Confirm & Book
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h3>
+                <p className="text-gray-500 font-medium">Redirecting to your dashboard...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
