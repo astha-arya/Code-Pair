@@ -1,30 +1,53 @@
-import { Code2, Bell, Wallet, UserPlus, Video } from 'lucide-react';
+import React, { useState } from 'react';
+import { Code2, Bell, Wallet, UserPlus, Video, AlertTriangle, X } from 'lucide-react';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const upcomingSessions = [
+  // 1. Converted to State and added IDs for easy deletion
+  const [sessions, setSessions] = useState([
     {
+      id: 1,
       time: 'Tomorrow 2:00 PM',
       name: 'Aryaman',
       avatar: 'A',
       skills: ['React', 'JavaScript'],
     },
     {
+      id: 2,
       time: 'Tomorrow 11:30 AM',
       name: 'Rahul',
       avatar: 'R',
       skills: ['Python'],
     },
     {
+      id: 3,
       time: 'Apr 26 10:00 AM',
       name: 'Suzanne',
       avatar: 'S',
       skills: ['Java', 'SQL'],
     },
-  ];
+  ]);
+
+  // 2. State for the Cancel Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sessionToCancel, setSessionToCancel] = useState<any>(null);
+
+  // 3. Functions to handle the cancellation flow
+  const openCancelModal = (session: any) => {
+    setSessionToCancel(session);
+    setIsModalOpen(true);
+  };
+
+  const handleCancel = () => {
+    // Filter out the cancelled session
+    setSessions(sessions.filter((s) => s.id !== sessionToCancel.id));
+    // Close modal and clear selection
+    setIsModalOpen(false);
+    setSessionToCancel(null);
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -122,9 +145,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <div className="bg-white rounded-[20px] shadow-md p-8 border border-gray-100">
           <h3 className="text-2xl font-bold text-gray-900 mb-6">Upcoming Sessions</h3>
           <div className="space-y-4">
-            {upcomingSessions.map((session, index) => (
+            {sessions.map((session) => (
               <div
-                key={index}
+                key={session.id}
                 className="flex items-center justify-between p-5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
               >
                 <div className="flex items-center space-x-4 flex-1">
@@ -146,14 +169,75 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     </div>
                   </div>
                 </div>
-                <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md">
-                  Join
-                </button>
+                
+                {/* 4. Added Cancel button next to Join */}
+                <div className="flex items-center space-x-3">
+                  <button 
+                    onClick={() => openCancelModal(session)}
+                    className="text-sm font-semibold text-gray-500 hover:text-red-500 px-4 py-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md">
+                    Join
+                  </button>
+                </div>
+
               </div>
             ))}
+            {sessions.length === 0 && (
+              <div className="text-center py-8 text-gray-500 font-medium">
+                No upcoming sessions.
+              </div>
+            )}
           </div>
         </div>
       </main>
+
+      {/* 5. The Cancellation Modal Pop-up */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm"
+            onClick={() => setIsModalOpen(false)}
+          ></div>
+          
+          {/* Modal Card */}
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md p-8 relative z-10 animate-in fade-in zoom-in duration-200">
+            <button 
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            
+            <h3 className="text-2xl font-bold text-center text-gray-900 mb-2">Cancel Interview?</h3>
+            <p className="text-center text-gray-500 mb-8 font-medium leading-relaxed">
+              Are you sure you want to cancel your upcoming session with <span className="font-bold text-gray-900">{sessionToCancel?.name}</span>? This time slot will be released for others to book.
+            </p>
+            
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl font-bold transition-colors"
+              >
+                Keep Session
+              </button>
+              <button 
+                onClick={handleCancel}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3.5 rounded-xl font-bold transition-colors shadow-lg shadow-red-500/30"
+              >
+                Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
