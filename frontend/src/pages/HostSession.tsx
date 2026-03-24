@@ -1,4 +1,4 @@
-import { Code2, Calendar, ChevronDown, Plus, Check, Bell, ArrowLeft } from 'lucide-react';
+import { Code2, ChevronDown, Plus, Check, Bell, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 
 interface HostSessionProps {
@@ -13,8 +13,15 @@ interface Topic {
 
 export default function HostSession({ onNavigate }: HostSessionProps) {
   const [selectedTopics, setSelectedTopics] = useState<string[]>(['Arrays']);
-  // NEW STATE: For the Success Modal
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  
+  const [date, setDate] = useState('');
+  // 1. UPDATED STATE: Replaced "time" with "startTime" and "endTime"
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+
+  const userName = localStorage.getItem('userName') || 'Student';
+  const userInitials = userName.substring(0, 2).toUpperCase();
 
   const topics: Topic[] = [
     { name: 'Arrays', bgColor: 'bg-blue-100', textColor: 'text-blue-700' },
@@ -37,11 +44,44 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Instead of immediately navigating, open the success modal!
-    setIsSuccessModalOpen(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/slots/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        // 2. UPDATED PAYLOAD: Sending the exact variable names the backend expects
+        body: JSON.stringify({
+          date: date,
+          startTime: startTime,
+          endTime: endTime,
+          topics: selectedTopics
+        })
+      });
+
+      if (response.ok) {
+        setIsSuccessModalOpen(true);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Failed to create slot');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Network error. Please try again.');
+    }
   };
+
+  // Helper arrays for time options
+  const timeOptions = [
+    "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
+    "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"
+  ];
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -49,42 +89,23 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-8">
-              <button
-                onClick={() => onNavigate('dashboard')}
-                className="flex items-center hover:opacity-80 transition-opacity"
-              >
+              <button onClick={() => onNavigate('dashboard')} className="flex items-center hover:opacity-80 transition-opacity">
                 <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl">
                   <Code2 className="w-6 h-6 text-white" />
                 </div>
                 <h1 className="ml-2 text-xl font-bold text-gray-900">Code-Pair</h1>
               </button>
-
-              <div className="hidden md:flex items-center space-x-1">
-                <button
-                  onClick={() => onNavigate('dashboard')}
-                  className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  Dashboard
-                </button>
-                <button className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg">
-                  Sessions
-                </button>
-                <button className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                  Leaderboard
-                </button>
-              </div>
             </div>
 
             <div className="flex items-center space-x-4">
               <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
                 <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full"></span>
               </button>
               <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
                 <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">SK</span>
+                  <span className="text-white font-semibold text-sm">{userInitials}</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-900 hidden md:block">Sanjay K</span>
+                <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
               </div>
             </div>
           </div>
@@ -93,10 +114,7 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
 
       <main className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-2xl">
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors mb-6 font-medium"
-          >
+          <button onClick={() => onNavigate('dashboard')} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors mb-6 font-medium">
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
           </button>
@@ -107,31 +125,47 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
             <form onSubmit={handleSubmit} className="space-y-8">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-3">Select Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-gray-700"
-                    required
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-gray-700"
+                  required
+                />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Select Time</label>
-                <div className="relative">
-                  <select 
-                    required 
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none bg-white cursor-pointer text-gray-700"
-                  >
-                    <option value="" disabled selected>Choose a time slot</option>
-                    <option value="09:00">9:00 AM</option>
-                    <option value="10:00">10:00 AM</option>
-                    <option value="11:00">11:00 AM</option>
-                    <option value="14:00">2:00 PM</option>
-                    <option value="15:00">3:00 PM</option>
-                    <option value="16:00">4:00 PM</option>
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              {/* 3. UPDATED UI: Side-by-side layout for Start and End Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Start Time</label>
+                  <div className="relative">
+                    <select 
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      required 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none bg-white cursor-pointer text-gray-700"
+                    >
+                      <option value="" disabled>Start Time</option>
+                      {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">End Time</label>
+                  <div className="relative">
+                    <select 
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      required 
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all appearance-none bg-white cursor-pointer text-gray-700"
+                    >
+                      <option value="" disabled>End Time</option>
+                      {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
 
@@ -151,11 +185,7 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
                             : `${topic.bgColor} ${topic.textColor} opacity-60 hover:opacity-100`
                         }`}
                       >
-                        {isSelected ? (
-                          <Check className="w-4 h-4" />
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
+                        {isSelected ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                         {topic.name}
                       </button>
                     );
@@ -163,9 +193,10 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
                 </div>
               </div>
 
+              {/* Validation logic updated to require all fields */}
               <button
                 type="submit"
-                disabled={selectedTopics.length === 0}
+                disabled={selectedTopics.length === 0 || !date || !startTime || !endTime}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30 text-lg mt-10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Post Slot (+1 Credit) →
@@ -175,7 +206,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
         </div>
       </main>
 
-      {/* NEW: Success Modal Popup */}
       {isSuccessModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-sm p-8 text-center relative animate-in fade-in zoom-in duration-200">

@@ -1,52 +1,88 @@
-import React, { useState } from 'react';
-import { Code2, Bell, Wallet, UserPlus, Video, AlertTriangle, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Code2, Bell, Wallet, UserPlus, Video, AlertTriangle, X, Loader2 } from 'lucide-react';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  // 1. Converted to State and added IDs for easy deletion
-  const [sessions, setSessions] = useState([
-    {
-      id: 1,
-      time: 'Tomorrow 2:00 PM',
-      name: 'Aryaman',
-      avatar: 'A',
-      skills: ['React', 'JavaScript'],
-    },
-    {
-      id: 2,
-      time: 'Tomorrow 11:30 AM',
-      name: 'Rahul',
-      avatar: 'R',
-      skills: ['Python'],
-    },
-    {
-      id: 3,
-      time: 'Apr 26 10:00 AM',
-      name: 'Suzanne',
-      avatar: 'S',
-      skills: ['Java', 'SQL'],
-    },
-  ]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [credits, setCredits] = useState<number>(2); // Default fallback
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 2. State for the Cancel Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sessionToCancel, setSessionToCancel] = useState<any>(null);
 
-  // 3. Functions to handle the cancellation flow
+  // Dynamic user details
+  const userName = localStorage.getItem('userName') || 'Student';
+  const userInitials = userName.substring(0, 2).toUpperCase();
+
+  // 1. FETCH MY BOOKINGS AND CREDITS ON LOAD
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = { 'Authorization': `Bearer ${token}` };
+
+        // Fetch Bookings
+        const bookingsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/bookings/my-bookings`, { headers });
+        if (bookingsRes.ok) {
+          const bData = await bookingsRes.json();
+          // Adjust according to how your teammate's API returns the array
+          setSessions(bData.data || bData || []);
+        }
+
+        // Fetch User Credits (Using the creditRoutes endpoint your teammate built)
+        const creditsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/credits/balance`, { headers });
+        if (creditsRes.ok) {
+          const cData = await creditsRes.json();
+          // THE FIX: Add .data before .credits to look inside the nested object!
+          setCredits(cData.data?.credits ?? 2);
+        }
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   const openCancelModal = (session: any) => {
     setSessionToCancel(session);
     setIsModalOpen(true);
   };
 
-  const handleCancel = () => {
-    // Filter out the cancelled session
-    setSessions(sessions.filter((s) => s.id !== sessionToCancel.id));
-    // Close modal and clear selection
-    setIsModalOpen(false);
-    setSessionToCancel(null);
+  // 2. SEND CANCEL REQUEST TO BACKEND
+  const handleCancel = async () => {
+    if (!sessionToCancel) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/bookings/${sessionToCancel._id}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        // Remove from UI instantly (or you could mark it as 'cancelled')
+        setSessions(sessions.filter((s) => s._id !== sessionToCancel._id));
+        setIsModalOpen(false);
+        setSessionToCancel(null);
+        // Optimistically add the credit back
+        setCredits(prev => prev + 1);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || "Failed to cancel session.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Network error while canceling.");
+    }
   };
 
   return (
@@ -82,9 +118,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </button>
               <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
                 <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">JD</span>
+                  <span className="text-white font-semibold text-sm">{userInitials}</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-900 hidden md:block">John Doe</span>
+                <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
               </div>
             </div>
           </div>
@@ -97,7 +133,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             <Wallet className="w-6 h-6 text-white mr-2" />
             <h2 className="text-white font-semibold text-lg">Wallet</h2>
           </div>
-          <div className="text-6xl font-bold text-white mb-2">2</div>
+          {/* Dynamic Credits */}
+          <div className="text-6xl font-bold text-white mb-2">{credits}</div>
           <div className="text-xl font-semibold text-blue-100">CREDITS AVAILABLE</div>
           <p className="text-blue-200 text-sm mt-3 font-medium">1 Credit = 1 Mock Interview Booking</p>
         </div>
@@ -144,66 +181,78 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
         <div className="bg-white rounded-[20px] shadow-md p-8 border border-gray-100">
           <h3 className="text-2xl font-bold text-gray-900 mb-6">Upcoming Sessions</h3>
-          <div className="space-y-4">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className="flex items-center justify-between p-5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
-              >
-                <div className="flex items-center space-x-4 flex-1">
-                  <div className="text-sm font-semibold text-gray-600 w-32">{session.time}</div>
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
-                    <span className="text-white font-semibold">{session.avatar}</span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-900">{session.name}</div>
-                    <div className="flex gap-2 mt-1">
-                      {session.skills.map((skill) => (
-                        <span
-                          key={skill}
-                          className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg"
-                        >
-                          {skill}
-                        </span>
-                      ))}
+          
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {sessions.map((session) => (
+                <div
+                  key={session._id}
+                  className="flex items-center justify-between p-5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
+                >
+                  <div className="flex items-center space-x-4 flex-1">
+                    <div className="text-sm font-semibold text-gray-600 w-32">
+                      {/* Format date & time from backend */}
+                      {session.slot?.date ? new Date(session.slot.date).toLocaleDateString() : 'Date TBD'}<br/>
+                      <span className="text-gray-900">{session.slot?.time || 'Time TBD'}</span>
+                    </div>
+                    <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
+                      <span className="text-white font-semibold">
+                        {session.status === 'scheduled' ? 'S' : 'C'}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900">Mock Interview</div>
+                      <div className="flex gap-2 mt-1">
+                        {session.slot?.topics?.map((topic: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg"
+                          >
+                            {topic}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                {/* 4. Added Cancel button next to Join */}
-                <div className="flex items-center space-x-3">
-                  <button 
-                    onClick={() => openCancelModal(session)}
-                    className="text-sm font-semibold text-gray-500 hover:text-red-500 px-4 py-2 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md">
-                    Join
-                  </button>
-                </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    {session.status !== 'cancelled' && (
+                      <button 
+                        onClick={() => openCancelModal(session)}
+                        className="text-sm font-semibold text-gray-500 hover:text-red-500 px-4 py-2 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold px-6 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md">
+                      Join
+                    </button>
+                  </div>
 
-              </div>
-            ))}
-            {sessions.length === 0 && (
-              <div className="text-center py-8 text-gray-500 font-medium">
-                No upcoming sessions.
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <div className="text-center py-8 text-gray-500 font-medium bg-gray-50 rounded-[16px]">
+                  No upcoming sessions. Book or host one to get started!
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 
-      {/* 5. The Cancellation Modal Pop-up */}
+      {/* Cancellation Modal Pop-up */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           ></div>
           
-          {/* Modal Card */}
           <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md p-8 relative z-10 animate-in fade-in zoom-in duration-200">
             <button 
               onClick={() => setIsModalOpen(false)}
@@ -218,7 +267,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             
             <h3 className="text-2xl font-bold text-center text-gray-900 mb-2">Cancel Interview?</h3>
             <p className="text-center text-gray-500 mb-8 font-medium leading-relaxed">
-              Are you sure you want to cancel your upcoming session with <span className="font-bold text-gray-900">{sessionToCancel?.name}</span>? This time slot will be released for others to book.
+              Are you sure you want to cancel this upcoming session? This time slot will be released for others to book.
             </p>
             
             <div className="flex items-center gap-4">

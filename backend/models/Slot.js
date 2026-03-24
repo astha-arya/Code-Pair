@@ -29,6 +29,12 @@ const slotSchema = new mongoose.Schema(
       required: [true, "End time is required"],
     },
 
+    // Add this right under endTime!
+    topics: {
+      type: [String],
+      default: ["General"]
+    },
+
     // false = available to be booked, true = already booked
     isBooked: {
       type: Boolean,

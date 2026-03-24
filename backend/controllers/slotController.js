@@ -12,7 +12,7 @@ const Slot = require("../models/Slot");
 // ─────────────────────────────────────────────
 const createSlot = async (req, res) => {
   try {
-    const { date, startTime, endTime } = req.body;
+    const { date, startTime, endTime, topics } = req.body;
 
     // ── 1. Validate required fields ──
     if (!date || !startTime || !endTime) {
@@ -63,6 +63,7 @@ const createSlot = async (req, res) => {
       date:        new Date(date),
       startTime,
       endTime,
+      topics,
     });
 
     res.status(201).json({

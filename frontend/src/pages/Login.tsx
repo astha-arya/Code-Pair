@@ -1,13 +1,49 @@
-import { Code2 } from 'lucide-react';
+import { useState } from 'react';
+import { Code2, AlertCircle } from 'lucide-react'; // Added AlertCircle for error messages
 
 interface LoginProps {
   onNavigate: (page: string) => void;
 }
 
 export default function Login({ onNavigate }: LoginProps) {
-  const handleSubmit = (e: React.FormEvent) => {
+  // 1. Add state to hold the input values and any errors
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 2. Update the submit function to talk to your backend
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onNavigate('dashboard');
+    setError(''); // Clear any previous errors
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        // FIX: Read from responseData.data.token instead of responseData.token
+        localStorage.setItem('token', responseData.data.token);
+        localStorage.setItem('userName', responseData.data.name || email.split('@')[0]);
+        
+        onNavigate('dashboard');
+      } else {
+        setError(responseData.message || 'Login failed. Please check your credentials.');
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError('Network error. Is your backend server running?');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -25,6 +61,14 @@ export default function Login({ onNavigate }: LoginProps) {
           <p className="text-gray-600 font-medium">Enter your details to access your account</p>
         </div>
 
+        {/* 3. Show an error message box if something goes wrong */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm font-semibold">{error}</p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -33,6 +77,8 @@ export default function Login({ onNavigate }: LoginProps) {
             <input
               type="email"
               id="email"
+              value={email} // Bind state
+              onChange={(e) => setEmail(e.target.value)} // Update state on type
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
               placeholder="you@college.edu"
               required
@@ -46,6 +92,8 @@ export default function Login({ onNavigate }: LoginProps) {
             <input
               type="password"
               id="password"
+              value={password} // Bind state
+              onChange={(e) => setPassword(e.target.value)} // Update state on type
               className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
               placeholder="••••••••"
               required
@@ -63,9 +111,10 @@ export default function Login({ onNavigate }: LoginProps) {
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30"
+            disabled={isLoading}
+            className={`w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
-            Login to Code-Pair
+            {isLoading ? 'Logging in...' : 'Login to Code-Pair'}
           </button>
         </form>
 
