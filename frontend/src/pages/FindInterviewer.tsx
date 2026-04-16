@@ -129,9 +129,6 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
                 <button className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg">
                   Sessions
                 </button>
-                <button className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                  Leaderboard
-                </button>
               </div>
             </div>
 

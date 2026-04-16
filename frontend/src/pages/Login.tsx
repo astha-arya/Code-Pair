@@ -33,6 +33,7 @@ export default function Login({ onNavigate }: LoginProps) {
         // FIX: Read from responseData.data.token instead of responseData.token
         localStorage.setItem('token', responseData.data.token);
         localStorage.setItem('userName', responseData.data.name || email.split('@')[0]);
+        localStorage.setItem('userId', responseData.data._id);
         
         onNavigate('dashboard');
       } else {

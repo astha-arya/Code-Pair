@@ -5,6 +5,16 @@
 
 const Slot = require("../models/Slot");
 
+// Helper function to safely convert "01:00 PM" into integer 1300
+const timeToMilitary = (timeStr) => {
+  const [time, modifier] = timeStr.split(' ');
+  let [hours, minutes] = time.split(':');
+  let hr = parseInt(hours, 10);
+  if (modifier === 'PM' && hr !== 12) hr += 12;
+  if (modifier === 'AM' && hr === 12) hr = 0;
+  return (hr * 100) + parseInt(minutes, 10);
+};
+
 // ─────────────────────────────────────────────
 //  @desc    Create an availability slot
 //  @route   POST /api/slots/create
@@ -22,35 +32,37 @@ const createSlot = async (req, res) => {
       });
     }
 
-    // ── 2. Basic time logic check ──
-    // Compare times as strings in "HH:MM" format works for simple validation
-    if (startTime >= endTime) {
+    // ── 2. Foolproof mathematical time check ──
+    const startNum = timeToMilitary(startTime);
+    const endNum = timeToMilitary(endTime);
+
+    if (startNum >= endNum) {
       return res.status(400).json({
         success: false,
         message: "Start time must be before end time.",
       });
     }
 
-    // ── 3. Check for overlapping slots for the same interviewer on the same date ──
-    // A new slot overlaps an existing slot if:
-    //   new startTime < existing endTime  AND  new endTime > existing startTime
+    // ── 3. Check for overlapping slots using strict math ──
     const slotDate = new Date(date);
 
-    const overlapping = await Slot.findOne({
+    // Get all slots for this user on this exact calendar day
+    const slotsOnDate = await Slot.find({
       interviewer: req.user._id,
-      // Match slots on the same calendar date
       date: {
         $gte: new Date(slotDate.setHours(0, 0, 0, 0)),
         $lt:  new Date(slotDate.setHours(23, 59, 59, 999)),
-      },
-      // Overlap condition
-      $and: [
-        { startTime: { $lt: endTime } },
-        { endTime:   { $gt: startTime } },
-      ],
+      }
     });
 
-    if (overlapping) {
+    // Check if the new times intersect with any existing times
+    const isOverlapping = slotsOnDate.some(slot => {
+      const existingStart = timeToMilitary(slot.startTime);
+      const existingEnd = timeToMilitary(slot.endTime);
+      return startNum < existingEnd && endNum > existingStart;
+    });
+
+    if (isOverlapping) {
       return res.status(409).json({
         success: false,
         message: "This slot overlaps with one of your existing slots.",
@@ -60,7 +72,7 @@ const createSlot = async (req, res) => {
     // ── 4. Create the slot ──
     const slot = await Slot.create({
       interviewer: req.user._id,
-      date:        new Date(date),
+      date:        new Date(date), // Saves midnight of the selected date
       startTime,
       endTime,
       topics,
@@ -72,6 +84,7 @@ const createSlot = async (req, res) => {
       data: slot,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ success: false, message: "Server error creating slot." });
   }
 };
@@ -83,18 +96,17 @@ const createSlot = async (req, res) => {
 // ─────────────────────────────────────────────
 const getAvailableSlots = async (req, res) => {
   try {
-    // Fetch only slots that:
-    //   • are not yet booked
-    //   • are in the future (date >= today)
-    //   • are NOT created by the requesting user themselves
-    //     (you shouldn't interview yourself)
+    // Reset "today" to midnight so slots scheduled for later today still show up
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const slots = await Slot.find({
       isBooked: false,
-      date:     { $gte: new Date() },
+      date:     { $gte: today },
       interviewer: { $ne: req.user._id },
     })
-      .populate("interviewer", "name email") // Attach interviewer name/email
-      .sort({ date: 1, startTime: 1 });       // Soonest first
+      .populate("interviewer", "name email") 
+      .sort({ date: 1, startTime: 1 });       
 
     res.status(200).json({
       success: true,

@@ -247,8 +247,55 @@ const getMyBookings = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────
+//  @desc    Submit a 5-star rating and optional feedback
+//  @route   PATCH /api/bookings/:bookingId/rate
+//  @access  Private (interviewee or interviewer)
+// ─────────────────────────────────────────────
+const rateInterview = async (req, res) => {
+  try {
+    const { rating, feedback } = req.body;
+    const bookingId = req.params.bookingId;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Please provide a rating between 1 and 5." });
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ success: false, message: "Booking not found." });
+
+    if (booking.status !== "completed") {
+      return res.status(400).json({ success: false, message: "You can only rate completed interviews." });
+    }
+
+    // Determine who is making the request
+    const isInterviewee = booking.interviewee.toString() === req.user._id.toString();
+    const isInterviewer = booking.interviewer.toString() === req.user._id.toString();
+
+    if (isInterviewee) {
+      // Block double rating
+      if (booking.hostRating) return res.status(400).json({ success: false, message: "You have already rated this session." });
+      booking.hostRating = rating; 
+    } else if (isInterviewer) {
+      // Block double rating
+      if (booking.studentRating) return res.status(400).json({ success: false, message: "You have already rated this session." });
+      booking.studentRating = rating; 
+      if (feedback) booking.feedback = feedback; // Save written feedback from the host
+    } else {
+      return res.status(403).json({ success: false, message: "Not authorized to rate this session." });
+    }
+
+    await booking.save();
+    res.status(200).json({ success: true, message: "Feedback submitted successfully!", data: booking });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error submitting rating." });
+  }
+};
+
 module.exports = {
   bookInterview,
   cancelInterview,
   getMyBookings,
+  completeInterview,
+  rateInterview,
 };

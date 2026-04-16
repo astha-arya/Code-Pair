@@ -1,4 +1,4 @@
-import { Code2, ChevronDown, Plus, Check, Bell, ArrowLeft } from 'lucide-react';
+import { Code2, ChevronDown, Plus, Check, Bell, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
 interface HostSessionProps {
@@ -16,12 +16,19 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   
   const [date, setDate] = useState('');
-  // 1. UPDATED STATE: Replaced "time" with "startTime" and "endTime"
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
+  // NEW: Toast Notification State
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
   const userName = localStorage.getItem('userName') || 'Student';
   const userInitials = userName.substring(0, 2).toUpperCase();
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const topics: Topic[] = [
     { name: 'Arrays', bgColor: 'bg-blue-100', textColor: 'text-blue-700' },
@@ -44,8 +51,58 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
     );
   };
 
+  // Helper arrays for time options
+  const timeOptions = [
+    "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
+    "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"
+  ];
+
+  // FOOLPROOF LOOKUP DICTIONARY
+  const timeMap: Record<string, number> = {
+    "09:00 AM": 9,
+    "10:00 AM": 10,
+    "11:00 AM": 11,
+    "12:00 PM": 12,
+    "01:00 PM": 13,
+    "02:00 PM": 14,
+    "03:00 PM": 15,
+    "04:00 PM": 16,
+    "05:00 PM": 17,
+    "06:00 PM": 18
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 1. DATE VALIDATION
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to midnight for fair comparison
+    
+    const [year, month, day] = date.split('-');
+    const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+    if (selectedDate < today) {
+      showToast("Oops! You cannot schedule a session in the past.", "error");
+      return; 
+    }
+
+    // 2. TIME VALIDATION USING DICTIONARY
+    const startNum = timeMap[startTime];
+    const endNum = timeMap[endTime];
+
+    if (startNum >= endNum) {
+      showToast("Start time must be before end time.", "error");
+      return; 
+    }
+
+    // 3. PAST TIME TODAY VALIDATION
+    if (selectedDate.getTime() === today.getTime()) {
+      const currentHour = new Date().getHours();
+      if (startNum <= currentHour) {
+        showToast("This time slot has already passed today.", "error");
+        return;
+      }
+    }
     
     try {
       const token = localStorage.getItem('token');
@@ -56,7 +113,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        // 2. UPDATED PAYLOAD: Sending the exact variable names the backend expects
         body: JSON.stringify({
           date: date,
           startTime: startTime,
@@ -69,22 +125,25 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
         setIsSuccessModalOpen(true);
       } else {
         const errorData = await response.json();
-        alert(errorData.message || 'Failed to create slot');
+        showToast(errorData.message || 'Failed to create slot', 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('Network error. Please try again.');
+      showToast('Network error. Please try again.', 'error');
     }
   };
 
-  // Helper arrays for time options
-  const timeOptions = [
-    "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
-    "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"
-  ];
-
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-[#F8FAFC] relative">
+      
+      {/* TOAST UI */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-xl z-50 flex items-center gap-3 text-white font-semibold animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -134,7 +193,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
                 />
               </div>
 
-              {/* 3. UPDATED UI: Side-by-side layout for Start and End Time */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Start Time</label>
@@ -193,7 +251,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
                 </div>
               </div>
 
-              {/* Validation logic updated to require all fields */}
               <button
                 type="submit"
                 disabled={selectedTopics.length === 0 || !date || !startTime || !endTime}

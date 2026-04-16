@@ -45,6 +45,34 @@ const bookingSchema = new mongoose.Schema(
     },
 
     // Tracks whether the interviewer has already received their credit reward.
+    creditAwarded: {
+      type: Boolean,
+      default: false,
+    },
+
+    // 1-5 Star rating given BY the Interviewer TO the Student
+    studentRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+    },
+
+    // 1-5 Star rating given BY the Student TO the Interviewer
+    hostRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+    },
+
+    // Written feedback given BY the Host TO the Student
+    feedback: {
+      type: String,
+      default: null,
+    },
+
+    // Tracks whether the interviewer has already received their credit reward.
     // This prevents double-crediting if the endpoint is called more than once.
    
   },

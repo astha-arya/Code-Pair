@@ -9,6 +9,8 @@ const {
   bookInterview,
   cancelInterview,
   getMyBookings,
+  completeInterview,
+  rateInterview
 } = require("../controllers/bookingController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -23,9 +25,12 @@ router.post("/book", bookInterview);
 router.get("/my-bookings", getMyBookings);
 
 // PATCH /api/bookings/:bookingId/complete     →  Mark interview as completed (interviewer only)
-//router.patch("/:bookingId/complete", completeInterview);
+router.patch("/:bookingId/complete", completeInterview);
 
 // PATCH /api/bookings/:bookingId/cancel       →  Cancel an interview
 router.patch("/:bookingId/cancel", cancelInterview);
+
+// PATCH /api/bookings/:bookingId/rate         →  Submit a 1-5 star rating
+router.patch("/:bookingId/rate", rateInterview);
 
 module.exports = router;
