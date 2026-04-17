@@ -9,6 +9,7 @@ const {
   createSlot,
   getAvailableSlots,
   getMySlots,
+  deleteSlot,
 } = require("../controllers/slotController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -24,5 +25,7 @@ router.get("/available", getAvailableSlots);
 
 // GET  /api/slots/my-slots       →  View slots you created
 router.get("/my-slots", getMySlots);
+
+router.delete("/:id", protect, deleteSlot);
 
 module.exports = router;

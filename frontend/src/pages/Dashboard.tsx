@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Code2, Bell, Wallet, UserPlus, Video, AlertTriangle, X, Loader2, Star, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Code2, Bell, Wallet, UserPlus, Video, AlertTriangle, X, Loader2, Star, CheckCircle, LogOut } from 'lucide-react';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
@@ -22,6 +22,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   // Custom Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  
   // Modal States
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [sessionToCancel, setSessionToCancel] = useState<any>(null);
@@ -31,6 +32,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [rating, setRating] = useState<number>(5);
   const [hoveredStar, setHoveredStar] = useState<number>(0);
   const [feedbackText, setFeedbackText] = useState("");
+
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userId');
+    onNavigate('login');
+  };
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // If the menu is open, AND the click was NOT inside the menu...
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false); // Close it!
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -43,23 +64,44 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         const token = localStorage.getItem('token');
         const headers = { 'Authorization': `Bearer ${token}` };
 
+        // 1. Fetch Actual Bookings
         const bookingsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/bookings/my-bookings`, { headers });
-        if (bookingsRes.ok) {
-          const bData = await bookingsRes.json();
-          setSessions(bData.data || []);
+        const bookingsData = await bookingsRes.json();
+        let allSessions = bookingsData.data || [];
+
+        // 2. Fetch Unbooked Slots
+        const slotsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/slots/my-slots`, { headers });
+        if (slotsRes.ok) {
+          const slotsData = await slotsRes.json();
+          // Filter ONLY slots that are not booked yet
+          const unbookedSlots = (slotsData.data || []).filter((slot: any) => !slot.isBooked);
+
+          // Dress the slots up to look exactly like Booking objects for our UI
+          const openSlotSessions = unbookedSlots.map((slot: any) => ({
+            _id: slot._id, // Using the slot ID
+            isOpenSlot: true, // A special flag so we know it's a raw slot!
+            interviewer: { _id: userId, name: userName }, // I am the host
+            interviewee: null, // Nobody has booked it yet
+            slot: { _id: slot._id, date: slot.date, startTime: slot.startTime, endTime: slot.endTime },
+            status: 'open', // New status for our badges
+            topic: slot.topics ? slot.topics[0] : 'TBD'
+          }));
+
+          // Combine them!
+          allSessions = [...allSessions, ...openSlotSessions];
         }
 
-        const creditsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/credits/balance`, { headers });
-        if (creditsRes.ok) {
-          const cData = await creditsRes.json();
-          setCredits(cData.data?.credits ?? 2);
-        }
+        // Sort everything by date so the timeline looks correct
+        allSessions.sort((a: any, b: any) => new Date(b.slot?.date).getTime() - new Date(a.slot?.date).getTime());
+        setSessions(allSessions);
+        
       } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
+        console.error("Failed to fetch dashboard data", error);
       } finally {
         setIsLoading(false);
       }
     };
+
     fetchDashboardData();
   }, []);
 
@@ -72,29 +114,42 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     if (!sessionToCancel) return;
     try {
       const token = localStorage.getItem('token');
+
+      // --- NEW: IF IT IS AN UNBOOKED SLOT ---
+      if (sessionToCancel.isOpenSlot) {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/slots/${sessionToCancel._id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          // Completely remove it from the screen
+          setSessions(prev => prev.filter(s => s._id !== sessionToCancel._id));
+          setIsCancelModalOpen(false);
+          showToast("Unbooked slot removed successfully.", "success");
+          setSessionToCancel(null);
+        } else {
+          showToast("Failed to remove slot.", "error");
+        }
+        return; // Stop here!
+      }
+
+      // --- OLD: IF IT IS A REAL BOOKING (Keep your existing logic below) ---
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/bookings/${sessionToCancel._id}/cancel`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (response.ok) {
-        // 1. Mark the session as cancelled in the UI
         setSessions(prev => prev.map(s => s._id === sessionToCancel._id ? { ...s, status: 'cancelled' } : s));
         setIsCancelModalOpen(false);
-        
-        // Only refund the UI wallet if the user is the student! ---
         const isHost = sessionToCancel.interviewer?._id === userId;
-        
         if (!isHost) {
-          // It's the student! Refund their visual wallet and show the refund message.
           setCredits(prev => prev + 1);
           showToast("Session cancelled and credit refunded.", "success");
         } else {
-          // It's the host! Don't touch their wallet, just show a normal message.
           showToast("Session cancelled successfully.", "success");
         }
-        // ----------------------------------------------------------------------
-
         setSessionToCancel(null);
       } else {
         const err = await response.json();
@@ -219,11 +274,30 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             )}
 
-            <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
-              <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
-                <span className="text-white font-semibold text-sm">{userInitials}</span>
-              </div>
-              <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
+            {/* CLICKABLE PROFILE WITH DROPDOWN */}
+            <div className="relative border-l border-gray-200 pl-4" ref={profileRef}>
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center space-x-3 focus:outline-none hover:scale-105 active:scale-95 transition-all duration-200"
+              >
+                <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
+                  <span className="text-white font-semibold text-sm">{userInitials}</span>
+                </div>
+                <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
+              </button>
+
+              {/* DROPDOWN MENU */}
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-3 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -252,7 +326,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <p className="text-red-500 font-semibold text-sm">-1 Credit</p>
               </div>
             </div>
-            <button onClick={() => onNavigate('find-interviewer')} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:from-blue-700 transition-all shadow-md">
+            <button 
+              onClick={() => onNavigate('find-interviewer')} 
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold py-3 rounded-xl hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-500/30 active:scale-95 transition-all duration-200"
+            >
               Find Interviewer
             </button>
           </div>
@@ -265,7 +342,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <p className="text-green-600 font-semibold text-sm">+1 Credit</p>
               </div>
             </div>
-            <button onClick={() => onNavigate('host-session')} className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold py-3 rounded-xl hover:from-green-700 transition-all shadow-md">
+            <button 
+              onClick={() => onNavigate('host-session')} 
+              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold py-3 rounded-xl hover:-translate-y-1 hover:shadow-xl hover:shadow-green-500/30 active:scale-95 transition-all duration-200"
+            >
               Host Session
             </button>
           </div>
@@ -287,7 +367,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center space-x-4 flex-1">
                         <div className="text-sm font-semibold text-gray-600 w-32">
-                          {session.slot?.date ? new Date(session.slot.date).toLocaleDateString() : 'Date TBD'}<br/>
+                          {session.slot?.date ? new Date(session.slot.date).toLocaleDateString('en-GB') : 'Date TBD'}<br/>
                           <span className="text-gray-900">{session.slot?.startTime ? `${session.slot.startTime} - ${session.slot.endTime}` : 'Time TBD'}</span>
                         </div>
                         
@@ -297,28 +377,35 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                             {session.status === 'upcoming' && <span className="px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-md">Upcoming</span>}
                             {session.status === 'completed' && <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">Completed</span>}
                             {session.status === 'cancelled' && <span className="px-2.5 py-0.5 bg-gray-200 text-gray-600 text-xs font-bold rounded-md">Cancelled</span>}
+                            {session.status === 'open' && <span className="px-2.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-md">Open Slot</span>}
                           </div>
                           <div className="text-sm text-gray-500 font-medium mt-1">
-                            {isHost ? 'Interviewing: ' : 'Hosted by: '}
-                            <span className="text-gray-900">{isHost ? session.interviewee?.name : session.interviewer?.name}</span>
+                            {session.isOpenSlot ? (
+                              <span className="text-purple-600 font-semibold italic">Waiting for a student to book...</span>
+                            ) : (
+                              <>
+                                {isHost ? 'Interviewing: ' : 'Hosted by: '}
+                                <span className="text-gray-900">{isHost ? session.interviewee?.name : session.interviewer?.name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
                       
                       <div className="flex items-center space-x-3">
                         {/* UPCOMING BUTTONS */}
-                        {session.status === 'upcoming' && (
-                          <>
-                            <button onClick={() => openCancelModal(session)} className="text-sm font-bold text-gray-500 hover:text-red-500 px-4 py-2 transition-colors">
-                              Cancel
-                            </button>
-                            {/* ONLY SHOW COMPLETE BUTTON IF USER IS THE HOST */}
-                            {isHost && (
-                              <button onClick={() => handleComplete(session._id)} className="bg-green-100 text-green-700 hover:bg-green-200 font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
-                                Complete (+1)
-                              </button>
-                            )}
-                          </>
+                        {/* CANCEL BUTTON: Show for both Upcoming AND Open slots */}
+                        {(session.status === 'upcoming' || session.status === 'open') && (
+                          <button onClick={() => openCancelModal(session)} className="text-sm font-bold text-gray-500 hover:text-red-500 px-4 py-2 transition-colors">
+                            Cancel
+                          </button>
+                        )}
+                        
+                        {/* COMPLETE BUTTON: Show ONLY for Upcoming slots IF user is the Host */}
+                        {session.status === 'upcoming' && isHost && (
+                          <button onClick={() => handleComplete(session._id)} className="bg-green-100 text-green-700 hover:bg-green-200 font-semibold px-4 py-2 rounded-lg transition-all shadow-sm">
+                            Complete (+1)
+                          </button>
                         )}
                         
                         {/* RATE BUTTON (Hides if already rated) */}
@@ -431,7 +518,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             )}
 
-            <button onClick={handleRate} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 text-white py-3.5 rounded-xl font-bold shadow-lg">
+            <button 
+              onClick={handleRate} 
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-500/30 active:scale-95 transition-all duration-200"
+            >
               Submit Feedback
             </button>
           </div>

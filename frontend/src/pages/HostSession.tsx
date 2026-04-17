@@ -1,5 +1,5 @@
-import { Code2, ChevronDown, Plus, Check, Bell, ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { Code2, ChevronDown, Plus, Check, ArrowLeft, CheckCircle, AlertTriangle, LogOut } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 
 interface HostSessionProps {
   onNavigate: (page: string) => void;
@@ -19,11 +19,33 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
-  // NEW: Toast Notification State
+  // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const userName = localStorage.getItem('userName') || 'Student';
   const userInitials = userName.substring(0, 2).toUpperCase();
+
+  // --- NEW: PROFILE DROPDOWN STATE & LOGIC ---
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userId');
+    onNavigate('login');
+  };
+  // -------------------------------------------
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -51,13 +73,11 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
     );
   };
 
-  // Helper arrays for time options
   const timeOptions = [
     "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
     "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"
   ];
 
-  // FOOLPROOF LOOKUP DICTIONARY
   const timeMap: Record<string, number> = {
     "09:00 AM": 9,
     "10:00 AM": 10,
@@ -74,9 +94,8 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 1. DATE VALIDATION
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to midnight for fair comparison
+    today.setHours(0, 0, 0, 0); 
     
     const [year, month, day] = date.split('-');
     const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -86,7 +105,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
       return; 
     }
 
-    // 2. TIME VALIDATION USING DICTIONARY
     const startNum = timeMap[startTime];
     const endNum = timeMap[endTime];
 
@@ -95,7 +113,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
       return; 
     }
 
-    // 3. PAST TIME TODAY VALIDATION
     if (selectedDate.getTime() === today.getTime()) {
       const currentHour = new Date().getHours();
       if (startNum <= currentHour) {
@@ -136,7 +153,6 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
   return (
     <div className="min-h-screen bg-[#F8FAFC] relative">
       
-      {/* TOAST UI */}
       {toast && (
         <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-xl z-50 flex items-center gap-3 text-white font-semibold animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
           {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
@@ -144,28 +160,44 @@ export default function HostSession({ onNavigate }: HostSessionProps) {
         </div>
       )}
 
+      {/* UPDATED NAVBAR */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-8">
-              <button onClick={() => onNavigate('dashboard')} className="flex items-center hover:opacity-80 transition-opacity">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl">
-                  <Code2 className="w-6 h-6 text-white" />
-                </div>
-                <h1 className="ml-2 text-xl font-bold text-gray-900">Code-Pair</h1>
-              </button>
-            </div>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          
+          <div className="flex items-center space-x-8">
+            <button onClick={() => onNavigate('dashboard')} className="flex items-center hover:opacity-80 transition-opacity">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl">
+                <Code2 className="w-6 h-6 text-white" />
+              </div>
+              <h1 className="ml-2 text-xl font-bold text-gray-900">Code-Pair</h1>
+            </button>
+          </div>
 
-            <div className="flex items-center space-x-4">
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-                <Bell className="w-5 h-5 text-gray-600" />
-              </button>
-              <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
-                <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
+          <div className="flex items-center space-x-4">
+            {/* CLICKABLE PROFILE WITH DROPDOWN */}
+            <div className="relative border-l border-gray-200 pl-4" ref={profileRef}>
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center space-x-3 focus:outline-none hover:scale-105 active:scale-95 transition-all duration-200"
+              >
+                <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
                   <span className="text-white font-semibold text-sm">{userInitials}</span>
                 </div>
                 <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
-              </div>
+              </button>
+
+              {/* DROPDOWN MENU */}
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-3 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

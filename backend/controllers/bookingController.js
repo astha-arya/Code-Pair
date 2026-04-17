@@ -7,6 +7,17 @@ const Booking = require("../models/Booking");
 const Slot    = require("../models/Slot");
 const User    = require("../models/User");
 
+// --- HELPER: Convert AM/PM to Military Time for Math ---
+const timeToMilitary = (timeStr) => {
+  if (!timeStr) return 0;
+  const [time, modifier] = timeStr.split(' ');
+  let [hours, minutes] = time.split(':');
+  let hr = parseInt(hours, 10);
+  if (modifier === 'PM' && hr !== 12) hr += 12;
+  if (modifier === 'AM' && hr === 12) hr = 0;
+  return (hr * 100) + parseInt(minutes, 10);
+};
+
 // ─────────────────────────────────────────────
 //  @desc    Book an interview slot
 //  @route   POST /api/bookings/book
@@ -16,67 +27,85 @@ const bookInterview = async (req, res) => {
   try {
     const { slotId, topic } = req.body;
 
-    // ── 1. Validate required fields ──
     if (!slotId || !topic) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide slotId and topic (DSA | Web | HR).",
-      });
+      return res.status(400).json({ success: false, message: "Please provide slotId and topic." });
     }
 
-    // ── 2. Find the slot ──
     const slot = await Slot.findById(slotId);
-    if (!slot) {
-      return res.status(404).json({ success: false, message: "Slot not found." });
-    }
+    if (!slot) return res.status(404).json({ success: false, message: "Slot not found." });
 
-    // ── 3. Make sure the slot isn't already booked ──
     if (slot.isBooked) {
-      return res.status(409).json({
-        success: false,
-        message: "This slot has already been booked by someone else.",
-      });
+      return res.status(409).json({ success: false, message: "This slot has already been booked." });
     }
 
-    // ── 4. Prevent self-booking ──
     if (slot.interviewer.toString() === req.user._id.toString()) {
-      return res.status(400).json({
-        success: false,
-        message: "You cannot book your own slot.",
-      });
+      return res.status(400).json({ success: false, message: "You cannot book your own slot." });
     }
 
-    // ── 5. Check if the user already booked this same slot (double-booking guard) ──
     const existingBooking = await Booking.findOne({
       interviewee: req.user._id,
       slot: slotId,
       status: "upcoming",
     });
+    
     if (existingBooking) {
+      return res.status(409).json({ success: false, message: "You have already booked this slot." });
+    }
+
+    // ── 6. BULLETPROOF OVERLAP CHECK ──
+    const myUpcomingBookings = await Booking.find({
+      $or: [{ interviewee: req.user._id }, { interviewer: req.user._id }],
+      status: "upcoming"
+    }).populate("slot");
+
+    // NEW: Check if I am already hosting an open slot at this time!
+    const myOpenSlots = await Slot.find({
+      interviewer: req.user._id,
+      isBooked: false
+    });
+
+    const newStart = timeToMilitary(slot.startTime);
+    const newEnd = timeToMilitary(slot.endTime);
+    const newDateStr = new Date(slot.date).toISOString().split('T')[0]; 
+
+    // Check against Bookings
+    const isDoubleBooked = myUpcomingBookings.some(booking => {
+      if (!booking.slot) return false;
+      const existingDateStr = new Date(booking.slot.date).toISOString().split('T')[0];
+      if (existingDateStr !== newDateStr) return false; 
+      const existingStart = timeToMilitary(booking.slot.startTime);
+      const existingEnd = timeToMilitary(booking.slot.endTime);
+      return newStart < existingEnd && newEnd > existingStart;
+    });
+
+    // Check against Open Hosted Slots
+    const isOverlappingOpenSlot = myOpenSlots.some(mySlot => {
+      const existingDateStr = new Date(mySlot.date).toISOString().split('T')[0];
+      if (existingDateStr !== newDateStr) return false; 
+      const existingStart = timeToMilitary(mySlot.startTime);
+      const existingEnd = timeToMilitary(mySlot.endTime);
+      return newStart < existingEnd && newEnd > existingStart;
+    });
+
+    if (isDoubleBooked || isOverlappingOpenSlot) {
       return res.status(409).json({
         success: false,
-        message: "You have already booked this slot.",
+        message: "You already have another session or open slot scheduled at this exact time!",
       });
     }
 
-    // ── 6. Check if the user has at least 1 credit ──
+    // ── 7. Process Credits & Book ──
     const interviewee = await User.findById(req.user._id);
     if (interviewee.credits < 1) {
-      return res.status(402).json({
-        success: false,
-        message: "Insufficient credits. You need at least 1 credit to book an interview.",
-      });
+      return res.status(402).json({ success: false, message: "Insufficient credits." });
     }
 
-    // ── 7. Deduct 1 credit from the interviewee ──
     interviewee.credits -= 1;
     await interviewee.save();
 
-    // ── 8. Mark the slot as booked ──
     slot.isBooked = true;
     await slot.save();
 
-    // ── 9. Create the booking record ──
     const booking = await Booking.create({
       interviewee:  req.user._id,
       interviewer:  slot.interviewer,
@@ -85,22 +114,13 @@ const bookInterview = async (req, res) => {
       status:       "upcoming",
     });
 
-    // Populate for a friendlier response
     const populatedBooking = await Booking.findById(booking._id)
       .populate("interviewee", "name email")
       .populate("interviewer", "name email")
       .populate("slot", "date startTime endTime");
 
-    res.status(201).json({
-      success: true,
-      message: `Interview booked! 1 credit deducted. You now have ${interviewee.credits} credit(s).`,
-      data: populatedBooking,
-    });
+    res.status(201).json({ success: true, message: `Interview booked! 1 credit deducted.`, data: populatedBooking });
   } catch (error) {
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map((e) => e.message);
-      return res.status(400).json({ success: false, message: messages.join(", ") });
-    }
     res.status(500).json({ success: false, message: "Server error booking interview." });
   }
 };
@@ -138,17 +158,15 @@ const completeInterview = async (req, res) => {
     booking.status = "completed";
 
     // ── 4. Award 1 credit to the interviewer — only if not already awarded ──
-    // The creditAwarded flag prevents double-crediting
     if (!booking.creditAwarded) {
       await User.findByIdAndUpdate(booking.interviewer, {
-        $inc: { credits: 1 }, // MongoDB atomic increment — safe and clean
+        $inc: { credits: 1 }, 
       });
       booking.creditAwarded = true;
     }
 
     await booking.save();
 
-    // Fetch updated interviewer credits to include in response
     const interviewer = await User.findById(req.user._id).select("credits");
 
     res.status(200).json({
@@ -205,7 +223,6 @@ const cancelInterview = async (req, res) => {
       $inc: { credits: 1 },
     });
 
-    // Fetch updated credits for the response
     const interviewee = await User.findById(booking.interviewee).select("credits");
 
     res.status(200).json({
@@ -225,7 +242,6 @@ const cancelInterview = async (req, res) => {
 // ─────────────────────────────────────────────
 const getMyBookings = async (req, res) => {
   try {
-    // Return bookings where the user is either the interviewee or the interviewer
     const bookings = await Booking.find({
       $or: [
         { interviewee: req.user._id },
@@ -235,7 +251,7 @@ const getMyBookings = async (req, res) => {
       .populate("interviewee", "name email")
       .populate("interviewer", "name email")
       .populate("slot", "date startTime endTime")
-      .sort({ createdAt: -1 }); // Newest first
+      .sort({ createdAt: -1 }); 
 
     res.status(200).json({
       success: true,
@@ -268,19 +284,16 @@ const rateInterview = async (req, res) => {
       return res.status(400).json({ success: false, message: "You can only rate completed interviews." });
     }
 
-    // Determine who is making the request
     const isInterviewee = booking.interviewee.toString() === req.user._id.toString();
     const isInterviewer = booking.interviewer.toString() === req.user._id.toString();
 
     if (isInterviewee) {
-      // Block double rating
       if (booking.hostRating) return res.status(400).json({ success: false, message: "You have already rated this session." });
       booking.hostRating = rating; 
     } else if (isInterviewer) {
-      // Block double rating
       if (booking.studentRating) return res.status(400).json({ success: false, message: "You have already rated this session." });
       booking.studentRating = rating; 
-      if (feedback) booking.feedback = feedback; // Save written feedback from the host
+      if (feedback) booking.feedback = feedback; 
     } else {
       return res.status(403).json({ success: false, message: "Not authorized to rate this session." });
     }

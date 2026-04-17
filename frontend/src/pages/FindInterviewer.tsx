@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Code2, Bell, Search, ChevronDown, CheckCircle, X, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Code2, Search, ChevronDown, CheckCircle, X, Loader2, AlertTriangle, LogOut } from 'lucide-react';
 
 interface FindInterviewerProps {
   onNavigate: (page: string) => void;
@@ -22,11 +22,38 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // 1. NEW STATE: To hold the interview type required by the backend
-  const [interviewTopic, setInterviewTopic] = useState('DSA');
+  // --- MISSING TOAST LOGIC RESTORED ---
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+  // ------------------------------------
+
+  // --- PROFILE DROPDOWN LOGIC ---
   const userName = localStorage.getItem('userName') || 'Student';
   const userInitials = userName.substring(0, 2).toUpperCase();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userId');
+    onNavigate('login');
+  };
+  // ------------------------------
 
   useEffect(() => {
     const fetchSlots = async () => {
@@ -58,11 +85,16 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
     setIsSuccess(false);
   };
 
+  // --- SMART AUTO-DETECT BOOKING LOGIC ---
   const confirmBooking = async () => {
     if (!selectedSlot) return;
+
+    const webTags = ['Full-Stack', 'MERN', 'React', 'Front-End'];
+    const slotTags = selectedSlot.topics || [];
+    const autoTopic = slotTags.some(tag => webTags.includes(tag)) ? 'Web' : 'DSA';
+
     try {
       const token = localStorage.getItem('token');
-      // 2. FIXED: Sending both slotId AND topic to the backend
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/bookings/book`, {
         method: 'POST',
         headers: {
@@ -71,7 +103,7 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
         },
         body: JSON.stringify({ 
           slotId: selectedSlot._id,
-          topic: interviewTopic // Backend requires one of: DSA, Web, HR
+          topic: autoTopic 
         })
       });
 
@@ -83,11 +115,15 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
         }, 2000);
       } else {
         const error = await response.json();
-        alert(error.message || "Failed to book slot.");
+        // --- UX FIX: Close the modal immediately so the user can clearly see the error Toast! ---
+        setIsModalOpen(false); 
+        showToast(error.message || "Failed to book slot.", "error");
+        // ----------------------------------------------------------------------------------------
       }
     } catch (error) {
       console.error("Booking error:", error);
-      alert("Network error occurred.");
+      setIsModalOpen(false); // Close it on network errors too!
+      showToast("Network error occurred.", "error");
     }
   };
 
@@ -110,39 +146,63 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-[#F8FAFC] relative">
+      
+      {/* TOAST NOTIFICATION */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-xl z-50 flex items-center gap-3 text-white font-semibold animate-in slide-in-from-bottom-5 fade-in duration-300 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+          {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* UPDATED NAVBAR (Matches Dashboard) */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-8">
-              <button onClick={() => onNavigate('dashboard')} className="flex items-center hover:opacity-80 transition-opacity">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl">
-                  <Code2 className="w-6 h-6 text-white" />
-                </div>
-                <h1 className="ml-2 text-xl font-bold text-gray-900">Code-Pair</h1>
-              </button>
-              
-              <div className="hidden md:flex items-center space-x-1">
-                <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                  Dashboard
-                </button>
-                <button className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg">
-                  Sessions
-                </button>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          
+          <div className="flex items-center space-x-8">
+            <div className="flex items-center">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-2 rounded-xl">
+                <Code2 className="w-6 h-6 text-white" />
               </div>
+              <h1 className="ml-2 text-xl font-bold text-gray-900">Code-Pair</h1>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full"></span>
+            <div className="hidden md:flex items-center space-x-1">
+              <button onClick={() => onNavigate('dashboard')} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
+                Dashboard
               </button>
-              <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
-                <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
+              <button className="px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg">
+                Sessions
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            {/* CLICKABLE PROFILE WITH DROPDOWN */}
+            <div className="relative border-l border-gray-200 pl-4" ref={profileRef}>
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center space-x-3 focus:outline-none hover:scale-105 active:scale-95 transition-all duration-200"
+              >
+                <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
                   <span className="text-white font-semibold text-sm">{userInitials}</span>
                 </div>
                 <span className="text-sm font-semibold text-gray-900 hidden md:block">{userName}</span>
-              </div>
+              </button>
+
+              {/* DROPDOWN MENU */}
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-3 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -188,13 +248,13 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
               const hostName = slot.interviewer?.name || 'Unknown User';
               const hostInitials = hostName.substring(0, 2).toUpperCase();
               const safeTopics = slot.topics || []; 
-              const formattedDate = slot.date ? new Date(slot.date).toLocaleDateString() : 'Date TBD';
+              const formattedDate = slot.date ? new Date(slot.date).toLocaleDateString('en-GB') : 'Date TBD';
 
               return (
                 <div key={slot._id} className="bg-white rounded-[16px] shadow-md p-6 hover:shadow-lg transition-all border border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-6 flex-1">
                     <div className="relative">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0">
+                      <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
                         <span className="text-white font-semibold text-sm">{hostInitials}</span>
                       </div>
                     </div>
@@ -237,7 +297,7 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
         )}
       </main>
 
-      {/* Booking Confirmation Modal */}
+      {/* Booking Confirmation Modal (Cleaned up!) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md p-8 relative animate-in fade-in zoom-in duration-200">
@@ -248,26 +308,9 @@ export default function FindInterviewer({ onNavigate }: FindInterviewerProps) {
                 </button>
                 <h3 className="text-2xl font-bold text-center text-gray-900 mb-2">Confirm Booking</h3>
                 
-                <p className="text-center text-gray-500 mb-6 font-medium leading-relaxed">
-                  Book a mock interview with <span className="font-bold text-gray-900">{selectedSlot?.interviewer?.name || 'User'}</span> on <span className="text-gray-900">{selectedSlot?.date ? new Date(selectedSlot.date).toLocaleDateString() : ''} at {selectedSlot?.startTime}</span>?
+                <p className="text-center text-gray-500 mb-8 font-medium leading-relaxed">
+                  Book a mock interview with <span className="font-bold text-gray-900">{selectedSlot?.interviewer?.name || 'User'}</span> on <span className="text-gray-900">{selectedSlot?.date ? new Date(selectedSlot.date).toLocaleDateString('en-GB') : ''} at {selectedSlot?.startTime}</span>?
                 </p>
-
-                {/* 3. NEW UI ELEMENT: Dropdown to select interview category required by backend */}
-                <div className="mb-8">
-                  <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
-                    Select Interview Category
-                  </label>
-                  <select 
-                    value={interviewTopic}
-                    onChange={(e) => setInterviewTopic(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all font-semibold text-gray-700 bg-white"
-                  >
-                    <option value="DSA">DSA Interview</option>
-                    <option value="Web">Web Development Interview</option>
-                    <option value="HR">HR Interview</option>
-                  </select>
-                  <p className="text-xs text-gray-400 mt-2 text-center italic">Backend requires one of these three categories.</p>
-                </div>
 
                 <div className="flex items-center gap-4">
                   <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl font-bold transition-colors">
