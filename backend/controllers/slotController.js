@@ -4,7 +4,7 @@
 // =============================================
 
 const Slot = require("../models/Slot");
-const Booking = require("../models/Booking"); // NEW: We need this to check your calendar!
+const Booking = require("../models/Booking"); // Needed to check your calendar!
 
 // Helper function to safely convert "01:00 PM" into integer 1300
 const timeToMilitary = (timeStr) => {
@@ -37,6 +37,7 @@ const createSlot = async (req, res) => {
       return res.status(400).json({ success: false, message: "Start time must be before end time." });
     }
 
+    // 1. Existing Check: Overlaps with your OTHER OPEN SLOTS
     const slotDate = new Date(date);
     const slotsOnDate = await Slot.find({
       interviewer: req.user._id,
@@ -53,8 +54,31 @@ const createSlot = async (req, res) => {
     });
 
     if (isOverlapping) {
-      return res.status(409).json({ success: false, message: "This slot overlaps with one of your existing slots." });
+      return res.status(409).json({ success: false, message: "This slot overlaps with one of your existing open slots." });
     }
+
+    // ── 2. NEW CHECK: OVERLAPS WITH YOUR BOOKED INTERVIEWS ──
+    const newDateStr = new Date(date).toISOString().split('T')[0]; 
+    
+    const myUpcomingBookings = await Booking.find({
+      $or: [{ interviewee: req.user._id }, { interviewer: req.user._id }],
+      status: "upcoming"
+    }).populate("slot");
+
+    const isOverlappingBooking = myUpcomingBookings.some(booking => {
+      if (!booking.slot) return false;
+      const existingDateStr = new Date(booking.slot.date).toISOString().split('T')[0];
+      if (existingDateStr !== newDateStr) return false; 
+      
+      const existingStart = timeToMilitary(booking.slot.startTime);
+      const existingEnd = timeToMilitary(booking.slot.endTime);
+      return startNum < existingEnd && endNum > existingStart;
+    });
+
+    if (isOverlappingBooking) {
+      return res.status(409).json({ success: false, message: "You cannot host! This slot overlaps with an interview you are already scheduled for." });
+    }
+    // ────────────────────────────────────────────────────────
 
     const slot = await Slot.create({
       interviewer: req.user._id,

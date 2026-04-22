@@ -58,7 +58,6 @@ const bookInterview = async (req, res) => {
       status: "upcoming"
     }).populate("slot");
 
-    // NEW: Check if I am already hosting an open slot at this time!
     const myOpenSlots = await Slot.find({
       interviewer: req.user._id,
       isBooked: false
@@ -68,7 +67,6 @@ const bookInterview = async (req, res) => {
     const newEnd = timeToMilitary(slot.endTime);
     const newDateStr = new Date(slot.date).toISOString().split('T')[0]; 
 
-    // Check against Bookings
     const isDoubleBooked = myUpcomingBookings.some(booking => {
       if (!booking.slot) return false;
       const existingDateStr = new Date(booking.slot.date).toISOString().split('T')[0];
@@ -78,7 +76,6 @@ const bookInterview = async (req, res) => {
       return newStart < existingEnd && newEnd > existingStart;
     });
 
-    // Check against Open Hosted Slots
     const isOverlappingOpenSlot = myOpenSlots.some(mySlot => {
       const existingDateStr = new Date(mySlot.date).toISOString().split('T')[0];
       if (existingDateStr !== newDateStr) return false; 
@@ -94,17 +91,15 @@ const bookInterview = async (req, res) => {
       });
     }
 
-    // ── 7. Process Credits & Book ──
+    // ── 7. ATOMIC CREDIT & SLOT UPDATES ──
     const interviewee = await User.findById(req.user._id);
     if (interviewee.credits < 1) {
       return res.status(402).json({ success: false, message: "Insufficient credits." });
     }
 
-    interviewee.credits -= 1;
-    await interviewee.save();
-
-    slot.isBooked = true;
-    await slot.save();
+    // Force DB to subtract 1 and mark slot booked instantly, bypassing memory
+    await User.findByIdAndUpdate(req.user._id, { $inc: { credits: -1 } });
+    await Slot.findByIdAndUpdate(slotId, { isBooked: true });
 
     const booking = await Booking.create({
       interviewee:  req.user._id,
@@ -138,7 +133,6 @@ const completeInterview = async (req, res) => {
       return res.status(404).json({ success: false, message: "Booking not found." });
     }
 
-    // ── 1. Only the interviewer can mark it as complete ──
     if (booking.interviewer.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -146,7 +140,6 @@ const completeInterview = async (req, res) => {
       });
     }
 
-    // ── 2. Make sure it hasn't already been completed or cancelled ──
     if (booking.status !== "upcoming") {
       return res.status(400).json({
         success: false,
@@ -154,10 +147,8 @@ const completeInterview = async (req, res) => {
       });
     }
 
-    // ── 3. Mark as completed ──
     booking.status = "completed";
 
-    // ── 4. Award 1 credit to the interviewer — only if not already awarded ──
     if (!booking.creditAwarded) {
       await User.findByIdAndUpdate(booking.interviewer, {
         $inc: { credits: 1 }, 
@@ -192,7 +183,6 @@ const cancelInterview = async (req, res) => {
       return res.status(404).json({ success: false, message: "Booking not found." });
     }
 
-    // ── 1. Only the interviewee or interviewer can cancel ──
     const isInterviewee = booking.interviewee.toString() === req.user._id.toString();
     const isInterviewer = booking.interviewer.toString() === req.user._id.toString();
 
@@ -203,7 +193,6 @@ const cancelInterview = async (req, res) => {
       });
     }
 
-    // ── 2. Only upcoming bookings can be cancelled ──
     if (booking.status !== "upcoming") {
       return res.status(400).json({
         success: false,
@@ -211,14 +200,11 @@ const cancelInterview = async (req, res) => {
       });
     }
 
-    // ── 3. Mark booking as cancelled ──
     booking.status = "cancelled";
     await booking.save();
 
-    // ── 4. Free up the slot (mark it as available again) ──
     await Slot.findByIdAndUpdate(booking.slot, { isBooked: false });
 
-    // ── 5. Restore 1 credit to the interviewee ──
     await User.findByIdAndUpdate(booking.interviewee, {
       $inc: { credits: 1 },
     });

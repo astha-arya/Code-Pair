@@ -91,6 +91,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           allSessions = [...allSessions, ...openSlotSessions];
         }
 
+        // ── 3. FETCH REAL CREDITS (WITH CACHE-BUSTER) ──
+        // The ?t=${Date.now()} forces Chrome to ask the database instead of lying to you
+        const profileRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/me?t=${Date.now()}`, { headers });
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          setCredits(profileData.data.credits); 
+        }
+
         // Sort everything by date so the timeline looks correct
         allSessions.sort((a: any, b: any) => new Date(b.slot?.date).getTime() - new Date(a.slot?.date).getTime());
         setSessions(allSessions);
